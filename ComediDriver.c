@@ -78,14 +78,16 @@ void rtMotorRead(long arg)
     (*writeIndexMR)++;
     
     //Circular buffer
-    if(*writeIndexMR..................)
-    { *writeIndexMR=0; }
-    if(*writeIndexMR== *readIndexMR)
+    if(*writeIndexMR >= 100)
+    {
+      *writeIndexMR = 0;
+    }
+    if(*writeIndexMR == *readIndexMR)
     {  (*readIndexMR).....;
     
     if(*readIndexMR==100)
     {
-        *readIndexMR=......;  
+        *readIndexMR = 0;  
     }
     }
     printk("Read Value = %d\n", motorReadBuffer[*writeIndexMR]);
@@ -107,7 +109,7 @@ void rtMotorWrite(long arg)
          
       }
       
-    comedi_data_write(comedi_dev, WRITE_SUBDEVICE, WRITE_CHANNEL, RANGE, AREF, ...........);
+    comedi_data_write(comedi_dev, WRITE_SUBDEVICE, WRITE_CHANNEL, RANGE, AREF, motorWrite);
     printk("Write Value = %d\n", motorWrite); // check whether data is properly read
     rt_task_wait_period();
   }
@@ -131,8 +133,8 @@ static int __init template_init(void)
 
   // Shared memory allocation to the variables
 
-  motorReadBuffer = rtai_kmalloc(nam2num("read_shmem"), 50*sizeof(int));
-  motorWriteBuffer = rtai_kmalloc(nam2num("write_shmem"), 50*sizeof(int));
+  motorReadBuffer = rtai_kmalloc(nam2num("read_shmem"), READLENGTH * sizeof(int));
+  motorWriteBuffer = rtai_kmalloc(nam2num("write_shmem"), WRITELENGTH * sizeof(int));
   setPoint = rtai_kmalloc(nam2num("setpoint_shmem"), sizeof(int));
 
   rt_task_make_periodic(&threadRead, NOW, PERIOD_1);
