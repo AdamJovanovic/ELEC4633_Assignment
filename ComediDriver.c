@@ -15,15 +15,16 @@
 #define STACK_SIZE 1024
 #define PRIORITY RT_SCHED_HIGHEST_PRIORITY
 #define USE_FPU 1
+#define STOP 2048
 #define NOW rt_get_time()
 
 // Set the periods so they run at 10 Hz
-#define PERIOD_1 nano2count(1e8)
-#define PERIOD_2 nano2count(1e8)
+#define PERIOD_1 nano2count(1e8) //1e8 Translates to 10Hz
+#define PERIOD_2 nano2count(1e8) //1e8 Translates to 10Hz
 
 //Shared memory locations
-#define READ_INPUT 800
-#define WRITE_OUTPUT 900
+#define READ_INPUT 800    //Using nam2num for shmem locations
+#define WRITE_OUTPUT 900  //Using nam2num for shmem locations
 
 // ADC/DAC related vriables
 #define READ_SUBDEVICE 0
@@ -37,21 +38,22 @@
 #define WRITELENGTH 100
 
 /* Store data needed for the thread */
-RT_TASK threadRead; // thread which reads motor position/speed 
-RT_TASK threadWrite; // thread which send out control value to motor
+RT_TASK threadRead;         // thread which reads motor position/speed 
+RT_TASK threadWrite;        // thread which send out control value to motor
 
 /* Data needed by comedi */
 comedi_t *comedi_dev;
 
 int motorRead;
+int scaledMotorRead;
 int motorWrite;
-volatile int *readIndexMR;
-volatile int *writeIndexMR;
+volatile int *readIndexMR;  //Index position of circ buffer for READING
+volatile int *writeIndexMR; //Index position of circ buffer for WRITING
 
-int *motorReadBuffer; //Circular Buffer READ
-int *motorWriteBuffer;
-double Kp=0.5; //propotional gain
-int *setPoint; //position setpoint
+int *motorReadBuffer;       //Circular Buffer READ
+int *motorWriteBuffer;      //Circular Buffer WRITE
+double Kp=0.5;              //propotional gain
+int *setPoint;              //position setpoint
 
 int motorReadBuffer_len = READLENGTH;
 int motorWriteBuffer_len = WRITELENGTH;
@@ -59,30 +61,35 @@ int motorWriteBuffer_len = WRITELENGTH;
 /* The code that is run */
 void rtMotorRead(long arg)
 {
-    *readIndexMR=......;  
-    *writeIndexMR=.....;
+  *readIndexMR=0;   //Initialise indexes at 0 (reset) position
+  *writeIndexMR=0;
   while (1)
   {
-
     comedi_data_read(comedi_dev, READ_SUBDEVICE, READ_CHANNEL, RANGE, AREF, &motorRead);
+
+    if (motorRead > 2048 && motorRead < 4096) {
+    	scaledMotorRead = 180 + (((4096 - motorRead)*360)/4096);
+    } else { 
+    	scaledMotorRead = 180 - ((motorRead*360)/4096);
+    }
+
+    //Obtain the current motor position and write it into the read buffer.*/
+    motorReadBuffer[(*readIndexMR)]= scaledMotorRead; //Write the scaled value (As an angle) to the circular buffer
+    (*writeIndexMR)++;
     
-        //Obtain the current motor position and write it into the read buffer.*/
-        motorReadBuffer[............]= motorRead;
-        (*writeIndexMR)++;
-        
-        //Circular buffer
-        if(*writeIndexMR..................)
-        { *writeIndexMR=0; }
-        if(*writeIndexMR== *readIndexMR)
-        {  (*readIndexMR).....;
-        
-        if(*readIndexMR==100)
-        {
-            *readIndexMR=......;  
-        }
-        }
-        printk("Read Value = %d\n", motorReadBuffer[*writeIndexMR]);
-        printk("Buffer index %d \n",*writeIndexMR);// check whether data is properly read
+    //Circular buffer
+    if(*writeIndexMR..................)
+    { *writeIndexMR=0; }
+    if(*writeIndexMR== *readIndexMR)
+    {  (*readIndexMR).....;
+    
+    if(*readIndexMR==100)
+    {
+        *readIndexMR=......;  
+    }
+    }
+    printk("Read Value = %d\n", motorReadBuffer[*writeIndexMR]);
+    printk("Buffer index %d \n",*writeIndexMR);// check whether data is properly read
     rt_task_wait_period();
   }
 }
@@ -124,7 +131,9 @@ static int __init template_init(void)
 
   // Shared memory allocation to the variables
 
- ......................................
+  motorReadBuffer = rtai_kmalloc(nam2num("read_shmem"), 50*sizeof(int));
+  motorWriteBuffer = rtai_kmalloc(nam2num("write_shmem"), 50*sizeof(int));
+  setPoint = rtai_kmalloc(nam2num("setpoint_shmem"), sizeof(int));
 
   rt_task_make_periodic(&threadRead, NOW, PERIOD_1);
   rt_task_make_periodic(&threadWrite, NOW, PERIOD_2);
@@ -135,11 +144,13 @@ static int __init template_init(void)
 /* Called when "rmmod" is used */
 static void __exit template_exit(void)
 {
+  rtai_kfree(nam2num("read_shmem"));
+  rtai_kfree(nam2num("write_shmem"));
+  rtai_kfree(nam2num("setpoint_shmem"));
+
   rt_task_delete(&threadRead);
   rt_task_delete(&threadWrite);
 
-  ........................................
-  
   comedi_close(comedi_dev);
 }
 
