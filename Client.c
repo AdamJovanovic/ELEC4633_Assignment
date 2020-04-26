@@ -6,17 +6,17 @@
 #include <rtai_nam2num.h>
 #include <rtai_shm.h>
 
-struct mymsgbuf {
-  long mtype;
-  int setpoint;
-};
+#define wait_1_second() sleep(1)
 
+typedef struct setpointmessage {
+    long mtype;
+    int setpoint;
+} SetpointMessage;
 
-struct .................;
-//int motorWriteBuffer[WRITELENGTH];
-
-int main(void)
+int main(int argc, char *argv[])
 {
+    SetpointMessage mySetpointSend;
+
     //messege passing variables
     int status, i;
     int queue;
@@ -25,21 +25,23 @@ int main(void)
     // generate a key to obtain a queue id
     msgkey = ftok(".",'m');
 
-  // obtain a queue identifier
+    // obtain a queue identifier (To match identiier in the Server.c program)
     queue = msgget(msgkey, IPC_CREAT | 0660);
     
-    // set the message type to 1 - can be any positive number
-    msg01.mtype = 1;
+    // set the message type to 1 - can be any positive number (Indicates message is setPoint)
+    mySetpointSend.mtype = 1;
+    //Take initial setpoint from commandline argument
+    int setpoint = atoi(argv[1]); //./Client *YOURSETPOINT*
+    
+    mySetpointSend.setpoint = setpoint;
+    status = msgsnd(queue, &mySetpointSend, sizeof(mySetpointSend.setpoint), 0);
 
-    int setpoint = atoi(argv[1]);
-    
-    msg01............. = 1000;
-    
     while(1)
     {
-    scanf("%d", &(msg01.setpoint))
-    status = msgsnd(........, ....., sizeof(...........), 0);
-    sleep(1)
+        printf("Enter setpoint (in degrees):\n");  
+        scanf("%d", &(msg01.setpoint))
+        status = msgsnd(queue, &mySetpointSend, sizeof(mySetpointSend.setpoint), 0);
+        wait_1_second()
     }
 	
     return 0;
