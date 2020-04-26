@@ -34,8 +34,6 @@
 #define RANGE 0
 #define AREF AREF_GROUND
 
-#define READLENGTH 100
-#define WRITELENGTH 100
 #define BUFFER_SIZE 100
 
 /* Store data needed for the thread */
@@ -78,15 +76,8 @@ TXBuffer init_buffer()
 
 void write_buffer(int data, TXBuffer* aBuffer)
 {
-    if(aBuffer->tail + 1 == aBuffer->head)
-    {
-        error(); //Buffer overflow
-    }
-    else
-    {
-        aBuffer->contents[aBuffer->tail] = data;
-        aBuffer->tail = (aBuffer->tail) % BUFFER_SIZE;
-    }
+    aBuffer->contents[aBuffer->writeIndex] = data;
+    aBuffer->writeIndex = (aBuffer->writeIndex + 1) % BUFFER_SIZE;
 }
 
 TXBuffer *txBuffer = init_buffer();
@@ -94,8 +85,6 @@ TXBuffer *txBuffer = init_buffer();
 /* The code that is run */
 void rtMotorRead(long arg)
 {
-    *readIndexMR=0;   //Initialise indexes at 0 (reset) position
-    *writeIndexMR=0;
     while (1)
     {
         comedi_data_read(comedi_dev, READ_SUBDEVICE, READ_CHANNEL, RANGE, AREF, &motorRead);
@@ -107,20 +96,8 @@ void rtMotorRead(long arg)
         }
 
         //Obtain the current motor position and write it into the read buffer.*/
-        motorReadBuffer[(*readIndexMR)]= scaledMotorRead; //Write the scaled value (As an angle) to the circular buffer
-        (*writeIndexMR)++;
+        write_buffer(scaledMotorRead, TXBuffer); //Write the scaled value (As an angle) to the circular buffer
         
-        //Circular buffer
-        (*writeIndexMR) = (*writeIndexMR) % BUFFER_SIZE;
-        
-        if(*writeIndexMR == *readIndexMR)
-        {  (*readIndexMR).....;
-        
-        if(*readIndexMR==100)
-        {
-            *readIndexMR = 0;  
-        }
-        }
         printk("Read Value = %d\n", motorReadBuffer[*writeIndexMR]);
         printk("Buffer index %d \n",*writeIndexMR);// check whether data is properly read
         rt_task_wait_period();
@@ -132,7 +109,7 @@ void rtMotorWrite(long arg)
     while (1) 
     {
         /* Motor has to reach the setpoint from its initial position through the shortest path - refer to lab instructions for more details*/
-        if ((*setPoint-motorRead)>2048)
+        if ((*setPoint-scaledMotorRead)>2048)
         {
             
         ...............................
@@ -163,7 +140,7 @@ static int __init template_init(void)
 
     // Shared memory allocation to the variables
 
-    readBuffer = rtai_kmalloc(nam2num("read_shmem"), BUFFER_SIZE * sizeof(int));
+    txBuffer = rtai_kmalloc(nam2num("read_shmem"), BUFFER_SIZE * sizeof(int));
     setPoint = rtai_kmalloc(nam2num("setpoint_shmem"), sizeof(int));
 
     rt_task_make_periodic(&threadRead, NOW, PERIOD_1);
