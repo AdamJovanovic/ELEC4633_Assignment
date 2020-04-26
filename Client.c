@@ -31,15 +31,17 @@ int main(int argc, char *argv[])
     // set the message type to 1 - can be any positive number (Indicates message is setPoint)
     mySetpointSend.mtype = 1;
     //Take initial setpoint from commandline argument
-    int setpoint = atoi(argv[1]); //./Client *YOURSETPOINT*
+    if (argc > 1){
+        int setpoint = atoi(argv[1]); //./Client *YOURSETPOINT*
     
-    mySetpointSend.setpoint = setpoint;
-    status = msgsnd(queue, &mySetpointSend, sizeof(mySetpointSend.setpoint), 0);
-
+        mySetpointSend.setpoint = setpoint;
+        status = msgsnd(queue, &mySetpointSend, sizeof(mySetpointSend.setpoint), 0);
+    }
+    
     while(1)
     {
         printf("Enter setpoint (in degrees):\n");  
-        scanf("%d", &(msg01.setpoint))
+        scanf("%d", &(mySetpointSend.setpoint))
         status = msgsnd(queue, &mySetpointSend, sizeof(mySetpointSend.setpoint), 0);
         wait_1_second()
     }
