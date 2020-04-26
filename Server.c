@@ -43,7 +43,8 @@ int motorWriteBuffer_len = WRITELENGTH;
 int main(void)
 {
     CircularBuffer *myCircBuffer = rtai_malloc(nam2num("read_shmem"), sizeof(CircularBuffer));
-    SetpointMessage *setpointRcvd = malloc(sizeof(SetpointMessage));   //Declare message struct (Setpoint) FROM Client.c
+    setpoint = rtai_malloc(nam2num("setpoint_shmem"), sizeof(int));
+    SetpointMessage mySetpointRcvd;   //Declare message struct (Setpoint) FROM Client.c
 
     int status;
     int rqueue;
@@ -62,8 +63,7 @@ int main(void)
  
     while(1)
     {
-        //myCircBuffer->writeIndex synchronises this program with the RTAI without 
-                //                  the need for polling or usleep.
+        //Waits until the writeIndex value indicates that the upper or lower half has finished writing
         if ((prevRead == LOWER_HALF && myCircBuffer->writeIndex < DISPLAY_LENGTH) || 
             (prevRead == UPPER_HALF && myCircBuffer->writeIndex > DISPLAY_LENGTH))
         {
@@ -77,15 +77,15 @@ int main(void)
         idx = idx % CIRCULAR_BUFFER_SIZE;    //Reset the read index at the limit of the circular buffer size
         
         //Check the message queue for messages addressed to the queue id.
-        status = msgrcv(rqueue, &setpointRcvd, sizeof(setpointRcvd.setpoint), 0, 0);
+        status = msgrcv(rqueue, &mySetpointRcvd, sizeof(mySetpointRcvd.setpoint), 0, 0);
         
         //Message type 1 is associated with setpoint. (Client.c sets mtype as 1 before sending)
-        if(setpointRcvd.mtype==1)
+        if(mySetpointRcvd.mtype==1)
         {
-            *setpoint = setpointRcvd.setpoint;
+            *setpoint = mySetpointRcvd.setpoint; //Write new setpoint to shared memory.
         }
 
-        //wait_5_seconds(); //
+        //wait_5_seconds();
     }
     
 	//Do something...???
