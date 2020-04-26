@@ -36,6 +36,7 @@
 
 #define READLENGTH 100
 #define WRITELENGTH 100
+#define BUFFER_SIZE 100
 
 /* Store data needed for the thread */
 RT_TASK threadRead;         // thread which reads motor position/speed 
@@ -47,113 +48,141 @@ comedi_t *comedi_dev;
 int motorRead;
 int scaledMotorRead;
 int motorWrite;
-volatile int *readIndexMR;  //Index position of circ buffer for READING
-volatile int *writeIndexMR; //Index position of circ buffer for WRITING
 
 int *motorReadBuffer;       //Circular Buffer READ
 int *motorWriteBuffer;      //Circular Buffer WRITE
-double Kp=0.5;              //propotional gain
-int *setPoint;              //position setpoint
+#define Kp 0.5              //Propotional gain (ALWAYS 0.5)
+int *setPoint;              //Position setpoint
 
 int motorReadBuffer_len = READLENGTH;
 int motorWriteBuffer_len = WRITELENGTH;
 
+typedef struct transmitbuffer
+{
+  int contents[BUFFER_SIZE];
+  int writeIndex;
+} TXBuffer;
+
+TXBuffer init_buffer()
+{
+    TXBuffer *myBuffer = malloc(sizeof(*myBuffer));
+    if(!myBuffer)
+    {
+        perror("Failed to allocate memory for Circular Buffer");
+        exit(1);
+    }
+
+    myBuffer->writeIndex = 0;
+    return myBuffer
+}
+
+void write_buffer(int data, TXBuffer* aBuffer)
+{
+    if(aBuffer->tail + 1 == aBuffer->head)
+    {
+        error(); //Buffer overflow
+    }
+    else
+    {
+        aBuffer->contents[aBuffer->tail] = data;
+        aBuffer->tail = (aBuffer->tail) % BUFFER_SIZE;
+    }
+}
+
+TXBuffer *txBuffer = init_buffer();
+
 /* The code that is run */
 void rtMotorRead(long arg)
 {
-  *readIndexMR=0;   //Initialise indexes at 0 (reset) position
-  *writeIndexMR=0;
-  while (1)
-  {
-    comedi_data_read(comedi_dev, READ_SUBDEVICE, READ_CHANNEL, RANGE, AREF, &motorRead);
-
-    if (motorRead > 2048 && motorRead < 4096) {
-    	scaledMotorRead = 180 + (((4096 - motorRead)*360)/4096);
-    } else { 
-    	scaledMotorRead = 180 - ((motorRead*360)/4096);
-    }
-
-    //Obtain the current motor position and write it into the read buffer.*/
-    motorReadBuffer[(*readIndexMR)]= scaledMotorRead; //Write the scaled value (As an angle) to the circular buffer
-    (*writeIndexMR)++;
-    
-    //Circular buffer
-    if(*writeIndexMR >= 100)
+    *readIndexMR=0;   //Initialise indexes at 0 (reset) position
+    *writeIndexMR=0;
+    while (1)
     {
-      *writeIndexMR = 0;
+        comedi_data_read(comedi_dev, READ_SUBDEVICE, READ_CHANNEL, RANGE, AREF, &motorRead);
+
+        if (motorRead > 2048 && motorRead < 4096) {
+            scaledMotorRead = 180 + (((4096 - motorRead)*360)/4096);
+        } else { 
+            scaledMotorRead = 180 - ((motorRead*360)/4096);
+        }
+
+        //Obtain the current motor position and write it into the read buffer.*/
+        motorReadBuffer[(*readIndexMR)]= scaledMotorRead; //Write the scaled value (As an angle) to the circular buffer
+        (*writeIndexMR)++;
+        
+        //Circular buffer
+        (*writeIndexMR) = (*writeIndexMR) % BUFFER_SIZE;
+        
+        if(*writeIndexMR == *readIndexMR)
+        {  (*readIndexMR).....;
+        
+        if(*readIndexMR==100)
+        {
+            *readIndexMR = 0;  
+        }
+        }
+        printk("Read Value = %d\n", motorReadBuffer[*writeIndexMR]);
+        printk("Buffer index %d \n",*writeIndexMR);// check whether data is properly read
+        rt_task_wait_period();
     }
-    if(*writeIndexMR == *readIndexMR)
-    {  (*readIndexMR).....;
-    
-    if(*readIndexMR==100)
-    {
-        *readIndexMR = 0;  
-    }
-    }
-    printk("Read Value = %d\n", motorReadBuffer[*writeIndexMR]);
-    printk("Buffer index %d \n",*writeIndexMR);// check whether data is properly read
-    rt_task_wait_period();
-  }
 }
-
 
 void rtMotorWrite(long arg)
 {
     while (1) 
-  {
-      /* Motor has to reach the setpoint from its initial position through the shortest path - refer to lab instructions for more details*/
-	  if ((*setPoint-motorRead)>2048)
-      {
+    {
+        /* Motor has to reach the setpoint from its initial position through the shortest path - refer to lab instructions for more details*/
+        if ((*setPoint-motorRead)>2048)
+        {
+            
+        ...............................
+            
+        }
         
-	   ...............................
-         
-      }
-      
-    comedi_data_write(comedi_dev, WRITE_SUBDEVICE, WRITE_CHANNEL, RANGE, AREF, motorWrite);
-    printk("Write Value = %d\n", motorWrite); // check whether data is properly read
-    rt_task_wait_period();
-  }
+        comedi_data_write(comedi_dev, WRITE_SUBDEVICE, WRITE_CHANNEL, RANGE, AREF, motorWrite);
+        printk("Write Value = %d\n", motorWrite); // check whether data is properly read
+        rt_task_wait_period();
+    }
 }
 
 /* Called when "insmod" is used */
 static int __init template_init(void)
 {
-  /* Start the RT timer, NB only needs to be done once */
-  rt_set_periodic_mode();
-  start_rt_timer(PERIOD_1);
-  start_rt_timer(PERIOD_2);
+    /* Start the RT timer, NB only needs to be done once */
+    rt_set_periodic_mode();
+    start_rt_timer(PERIOD_1);
+    start_rt_timer(PERIOD_2);
 
-  // Open Hardware
-  comedi_dev = comedi_open("/dev/comedi0");
+    // Open Hardware
+    comedi_dev = comedi_open("/dev/comedi0");
 
-  /* Initialise the data associated with a thread and make it periodic */
-  rt_task_init(&threadRead, rtMotorRead, ARG, STACK_SIZE, PRIORITY, USE_FPU, NULL);
-  rt_task_init(&threadWrite, rtMotorWrite, ARG, STACK_SIZE, PRIORITY, USE_FPU, NULL);
-  
+    /* Initialise the data associated with a thread and make it periodic */
+    rt_task_init(&threadRead, rtMotorRead, ARG, STACK_SIZE, PRIORITY, USE_FPU, NULL);
+    rt_task_init(&threadWrite, rtMotorWrite, ARG, STACK_SIZE, PRIORITY, USE_FPU, NULL);
+    
 
-  // Shared memory allocation to the variables
+    // Shared memory allocation to the variables
 
-  motorReadBuffer = rtai_kmalloc(nam2num("read_shmem"), READLENGTH * sizeof(int));
-  motorWriteBuffer = rtai_kmalloc(nam2num("write_shmem"), WRITELENGTH * sizeof(int));
-  setPoint = rtai_kmalloc(nam2num("setpoint_shmem"), sizeof(int));
+    readBuffer = rtai_kmalloc(nam2num("read_shmem"), BUFFER_SIZE * sizeof(int));
+    setPoint = rtai_kmalloc(nam2num("setpoint_shmem"), sizeof(int));
 
-  rt_task_make_periodic(&threadRead, NOW, PERIOD_1);
-  rt_task_make_periodic(&threadWrite, NOW, PERIOD_2);
-  
-  return 0;
+    rt_task_make_periodic(&threadRead, NOW, PERIOD_1);
+    rt_task_make_periodic(&threadWrite, NOW, PERIOD_2);
+    
+    return 0;
 }
 
 /* Called when "rmmod" is used */
 static void __exit template_exit(void)
 {
-  rtai_kfree(nam2num("read_shmem"));
-  rtai_kfree(nam2num("write_shmem"));
-  rtai_kfree(nam2num("setpoint_shmem"));
+    rtai_kfree(nam2num("read_shmem"));
+    //rtai_kfree(nam2num("write_shmem"));
+    rtai_kfree(nam2num("setpoint_shmem"));
 
-  rt_task_delete(&threadRead);
-  rt_task_delete(&threadWrite);
+    rt_task_delete(&threadRead);
+    rt_task_delete(&threadWrite);
 
-  comedi_close(comedi_dev);
+    comedi_close(comedi_dev);
 }
 
 module_init(template_init);
